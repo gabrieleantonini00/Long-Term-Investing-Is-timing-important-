@@ -1,0 +1,108 @@
+import pandas as pd 
+import numpy as np
+from matplotlib import pyplot as plt
+import random
+from scipy import stats
+
+# ETF details related to S&P 500
+name = ["XTrackers S&P500"]
+tickers = ["XSPX.MI"]
+ter = [0.15]
+
+# Select S&P 500 (index 0)
+quale = 0
+print(name[quale])
+
+# Retrieve the ticker and TER for S&P 500
+t1 = tickers[quale]
+ter1 = ter[quale]
+
+# Read the data for the S&P 500 ETF
+df = pd.read_csv("https://raw.githubusercontent.com/Nescio98/Stock-Indexes-Historical-Data/main/ETF/dati/" + t1 + ".csv", 
+                 usecols=["Date", "TRDPRC_1"], sep=';', parse_dates=True, index_col="Date")
+df.rename(columns={"TRDPRC_1": "x1"}, inplace=True)
+
+# Strategy 1: Random investment (investment at a random date)
+random_returns = []
+for _ in range(2000):  # Simulate for 2000 random dates
+    start_date = random.choice(df.index)
+    end_date = start_date + pd.DateOffset(years=10)
+    if end_date in df.index:
+        start_price = df.loc[start_date, 'x1']
+        end_price = df.loc[end_date, 'x1']
+        total_return = ((end_price / start_price) - 1) * 100
+        random_returns.append(total_return)
+
+# Function to compute market drop strategy returns for given drop percentage (with drop after random date)
+def market_drop_strategy(drop_percentage):
+    market_drop_returns = []
+    for i in range(2000):  # Iterate through 2000 random start dates
+        start_date = random.choice(df.index)
+
+        # Look for the maximum price after the start date (maximum after random start date)
+        post_start_date = df.loc[start_date:]  # Prices after the random start date
+        peak_price_after_start = post_start_date["x1"].max()  # Find the highest price after the start date
+        
+        # Now, look for the first date after the start date where price is drop_percentage lower than the peak
+        drop_date = post_start_date[post_start_date["x1"] <= peak_price_after_start * (1 - drop_percentage)]
+
+        if not drop_date.empty:
+            # Pick the first valid drop date that satisfies the condition
+            drop_date = drop_date.index[0]
+            
+            # The investment occurs at the drop date
+            drop_price = df.loc[drop_date, 'x1']
+            
+            # Calculate how many days remain from the drop date to 10 years after the random start date
+            target_date = start_date + pd.DateOffset(years=10)
+            days_to_end = (target_date - drop_date).days
+            
+            # The end date is the drop date + the calculated number of days
+            end_date = drop_date + pd.Timedelta(days=days_to_end)
+            
+            if end_date in df.index:
+                end_price = df.loc[end_date, 'x1']
+                # Calculate return over the period from drop date to the target date (days)
+                total_return = ((end_price / drop_price) - 1) * 100
+                market_drop_returns.append(total_return)
+        else:
+            # No drop happens within the 10 years from the start date, set return to zero
+            market_drop_returns.append(0)
+
+    return market_drop_returns
+
+# Get returns for 5% and 10% drop strategies
+drop_percentage_5 = 0.05
+drop_percentage_10 = 0.10
+market_drop_returns_5 = market_drop_strategy(drop_percentage_5)
+market_drop_returns_10 = market_drop_strategy(drop_percentage_10)
+
+# Function to calculate Annualized Return (CAGR)
+def calculate_annualized_return(returns, years=10):
+    return [(1 + return_ / 100) ** (1 / years) - 1 for return_ in returns]
+
+# Calculate annualized returns for each strategy
+annualized_random_returns = calculate_annualized_return(random_returns)
+annualized_drop_5_returns = calculate_annualized_return(market_drop_returns_5)
+annualized_drop_10_returns = calculate_annualized_return(market_drop_returns_10)
+
+# Calculate the average annualized return for each strategy
+average_annualized_random_return = np.mean(annualized_random_returns) * 100  # Convert back to percentage
+average_annualized_drop_5_return = np.mean(annualized_drop_5_returns) * 100
+average_annualized_drop_10_return = np.mean(annualized_drop_10_returns) * 100
+
+# Create a bar plot to compare the average annualized returns of all strategies
+plt.figure(figsize=(10, 6))
+annualized_returns = [average_annualized_random_return, average_annualized_drop_5_return, average_annualized_drop_10_return]
+strategies = ['Random Investment', 'Market Drop > 5%', 'Market Drop > 10%']
+
+plt.bar(strategies, annualized_returns, color=['blue', 'orange', 'green'])
+plt.title('Comparison of Average Annualized Returns (CAGR) Over 10 Years')
+plt.xlabel('Strategy')
+plt.ylabel('Average Annualized Return (%)')
+plt.show()
+
+# Print the average annualized returns for each strategy
+print(f"Average Annualized Return for Random Investment Strategy: {average_annualized_random_return:.2f}%")
+print(f"Average Annualized Return for Market Drop Strategy (5%): {average_annualized_drop_5_return:.2f}%")
+print(f"Average Annualized Return for Market Drop Strategy (10%): {average_annualized_drop_10_return:.2f}%")
